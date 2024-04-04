@@ -1,4 +1,3 @@
-# Import necessary libraries
 import streamlit as st
 from streamlit_chat import message
 import google.generativeai as genai
@@ -6,15 +5,12 @@ from dotenv import load_dotenv
 import os
 import tempfile
 import urllib.request
-from PIL import Image
 
-# Load environment variables from .env file
+# Carrega as variáveis de ambiente
 load_dotenv()
 
-# Get the Google API key from the environment variables
+# Configura a API key do Google Gemini
 api_key = os.getenv("GOOGLE_API_KEY")
-
-# Configure the Google Generative AI with the API key
 genai.configure(api_key=api_key)
 
 def initialize_session_state():
@@ -27,30 +23,43 @@ def initialize_session_state():
     if 'past' not in st.session_state:
         st.session_state['past'] = ["Olá, sou seu assistente."]
 
-def conversation_chat(query, history):
-    prompt = """
-    Você é um assistente que só conversa no idioma português do Brasil (você nunca, jamais conversa em outro idioma que não seja o português do Brasil).
-    Você responde as perguntas do usuário com base nos arquivos carregados.
-    Vamos pensar passo a passo para responder.
+# Função para carregar e processar dados de URLs específicas
+def load_and_process_data(file_urls):
+    all_text = []
+    for file_url in file_urls:
+        with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+            temp_file.write(urllib.request.urlopen(file_url).read())
+            temp_file_path = temp_file.name
+        
+        with open(temp_file_path, 'r', encoding='utf-8') as file:
+            all_text.extend(file.readlines())
+        os.remove(temp_file_path)
+
+    # Simplificação: junta os textos e retorna
+    return " ".join(all_text)[:500]  # Limita a 500 caracteres para simplificar
+
+def conversation_chat(query, history, processed_data):
+    prompt = f"""
+    Você é um assistente que só conversa no idioma português do Brasil. Baseado nas informações que temos: {processed_data}.
+    Pergunta do usuário: {query}
     """
-    query_with_prompt = prompt + query
     model = genai.GenerativeModel("gemini-pro", generation_config={"temperature": 0.7, "max_output_tokens": 512})
-    result = model.generate_content(query_with_prompt)
+    result = model.generate_content(prompt)
     history.append((query, result.text))
     return result.text
 
-def display_chat_history():
+def display_chat_history(processed_data):
     reply_container = st.container()
     container = st.container()
 
     with container:
         with st.form(key='my_form', clear_on_submit=True):
-            user_input = st.text_input("question:", placeholder="Me pergunte sobre o(s) conjunto(s) de dados pré-carregados", key='input')
+            user_input = st.text_input("Pergunta:", placeholder="Me pergunte algo", key='input')
             submit_button = st.form_submit_button(label='Enviar')
 
         if submit_button and user_input:
-            with st.spinner('Generating response...'):
-                output = conversation_chat(user_input, st.session_state['history'])
+            with st.spinner('Gerando resposta...'):
+                output = conversation_chat(user_input, st.session_state['history'], processed_data)
 
             st.session_state['past'].append(user_input)
             st.session_state['generated'].append(output)
@@ -58,17 +67,22 @@ def display_chat_history():
     if st.session_state['generated']:
         with reply_container:
             for i in range(len(st.session_state['generated'])):
-                logo_url = 'https://your_logo_url_here.png'
+                logo_url = 'https://raw.githubusercontent.com/pedrosale/falcon_test/a7248c8951827efd997b927d7a4d4c4c200c1996/logo_det3.png'  # Substitua pelo seu logo
                 message(st.session_state["past"][i], is_user=True, key=str(i) + '_user', logo=logo_url)
                 message(st.session_state["generated"][i], key=str(i), logo=logo_url)
 
 def main():
-    # Initialize session state
     initialize_session_state()
-    st.title('🦅💬 Chatbot Assistente com Gemini.')
-    
-    # Display the chat history and the input form for new questions
-    display_chat_history()
+    st.title('Chatbot Assistente com Gemini')
+
+    # URLs dos arquivos de texto para carregar
+    file_urls = [
+        "https://raw.githubusercontent.com/pedrosale/falcon_test/main/CTB3.txt",
+        "https://raw.githubusercontent.com/pedrosale/falcon_test/main/CTB2.txt"
+    ]
+    processed_data = load_and_process_data(file_urls)
+
+    display_chat_history(processed_data)
 
 if __name__ == "__main__":
     main()
