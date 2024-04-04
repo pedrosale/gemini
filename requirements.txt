@@ -18,3 +18,4 @@ langchain
 google-generativeai
 langchain-google-genai
 chromadb
+pysqlite3-binary
