@@ -69,8 +69,10 @@ def conversation_with_gemini(query, model, chat_history, vector_index, processed
     # Prepare query with history and relevant document context
     history_context = "\n".join([f"Q: {pair['question']}\nA: {pair['answer']}" for pair in chat_history])
     full_query = f"{history_context}\n\n{relevant_texts}\nQ: {query}\nA:"
+    
+    qa_chain  = RetrievalQA.from_chain_type(model, retriever=vector_index, return_source_documents=True)
 
-    response = model({"query": full_query})
+    response = qa_chain({"query": full_query})
     chat_history.append({"question": query, "answer": response["result"]})
     return response["result"]
 
