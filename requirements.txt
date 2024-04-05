@@ -4,3 +4,17 @@ streamlit
 langchain-google-genai
 python-dotenv
 chromadb
+torch
+accelerate
+sentence_transformers
+streamlit_chat
+faiss-cpu
+tiktoken
+ctransformers
+huggingface-hub
+pypdf
+replicate
+docx2txt
+googletrans==4.0.0-rc1
+langid
+PyPDF2
