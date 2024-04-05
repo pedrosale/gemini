@@ -6,8 +6,6 @@ from langchain.vectorstores import Chroma
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from dotenv import load_dotenv
 import os
-import tempfile
-import urllib.request
 import io
 
 st.title('Detran + Gemini 💬 CTB')
