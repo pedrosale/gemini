@@ -59,10 +59,6 @@ def initialize_session_state():
 
 
 def conversation_with_gemini(query, model, chat_history, qa_chain, processed_texts):
-    """
-    Updates conversation with Gemini considering the document context, chat history,
-    and utilizing the qa_chain for document retrieval, enriched with processed_texts.
-    """
     # Preparação da query com o histórico de conversa
     history_context = "\n".join([f"Q: {pair['question']}\nA: {pair['answer']}" for pair in chat_history])
     full_query = f"{history_context}\nQ: {query}"
@@ -71,6 +67,10 @@ def conversation_with_gemini(query, model, chat_history, qa_chain, processed_tex
     result = qa_chain({"query": full_query})
     answer = result.get("result", "Não foi possível gerar uma resposta.")
     source_documents_info = result.get("source_documents", [])
+    
+    # Tente imprimir ou inspecionar a estrutura de um Document
+    if source_documents_info:
+        print("Inspecting Document structure:", source_documents_info[0])
     
     # Enriquecimento da resposta com informações do primeiro documento relevante encontrado, se houver
     if source_documents_info:
