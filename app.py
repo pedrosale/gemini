@@ -58,7 +58,7 @@ def main():
     vector_index = load_and_process_context()
     
     # Configura o modelo Gemini
-    gemini_model = GoogleGenerativeAI(model_name=GEMINI_MODEL_NAME, api_key=GOOGLE_API_KEY, temperature=TEMPERATURE)
+    gemini_model = setup_gemini_model(GEMINI_MODEL_NAME, GOOGLE_API_KEY, TEMPERATURE)
     
     # Cria a cadeia de RAG
     qa_chain = RetrievalQA(generative_model=gemini_model, retriever=vector_index, return_source_documents=False)
