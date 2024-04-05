@@ -111,7 +111,7 @@ def main():
         if user_query:
             with st.spinner('Thinking...'):
                 # Ajuste para passar qa_chain se necessário ou utilizar diretamente dentro de conversation_with_gemini
-                answer, source_documents_info = conversation_with_gemini(user_query, gemini_model, st.session_state['chat_history'], qa_chain)
+                answer, source_documents_info = conversation_with_gemini(user_query, gemini_model, st.session_state['chat_history'], qa_chain, st.session_state['processed_texts'])
                 st.session_state['chat_history'].append({"question": user_query, "answer": answer})
                 # Pode incluir lógica para exibir informações dos documentos fonte se relevante
                 for interaction in st.session_state['chat_history']:
