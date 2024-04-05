@@ -1,4 +1,6 @@
-# app.py
+__import__('pysqlite3')
+import sys
+sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 import streamlit as st
 from io import BytesIO
 from langchain_community.document_loaders import TextLoader  # Ajuste para importação correta
