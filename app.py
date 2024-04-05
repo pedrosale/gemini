@@ -7,6 +7,11 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGener
 from langchain.vectorstores import Chroma
 from langchain.chains import RetrievalQA
 import os
+from dotenv import load_dotenv
+import tempfile
+import urllib.request
+
+load_dotenv()
 
 # Constants and API Keys
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
