@@ -65,7 +65,7 @@ def create_rag_qa_chain(model, vector_index):
 
 # Streamlit App
 def main():
-    st.title('Chatbot Assistente com Gemini')
+    st.title('Detran + Gemini 💬 CTB')
     # URL direta para a imagem hospedada no GitHub
     image_url = 'https://raw.githubusercontent.com/pedrosale/falcon_test/af8a20607bae402a893817be0a766ec55a9bcec3/RAG2.jpg'
     # Exibir a imagem usando a URL direta
