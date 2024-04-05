@@ -17,4 +17,4 @@ replicate
 docx2txt
 googletrans==4.0.0-rc1
 langid
-PyPDF2
+pysqlite3-binary
