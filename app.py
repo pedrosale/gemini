@@ -6,6 +6,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from langchain.vectorstores import Chroma
 from langchain.chains import RetrievalQA
+import os
 
 # Constants and API Keys
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
