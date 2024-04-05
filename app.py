@@ -2,12 +2,15 @@ __import__('pysqlite3')
 import sys
 sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 import streamlit as st
+from io import BytesIO
+from langchain_community.document_loaders import TextLoader  # Ajuste para importação correta
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from langchain.vectorstores import Chroma
 from langchain.chains import RetrievalQA
 import os
 from dotenv import load_dotenv
+import tempfile
 import urllib.request
 
 # Carrega variáveis de ambiente
