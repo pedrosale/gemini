@@ -58,23 +58,34 @@ def initialize_session_state():
         st.session_state['vector_index'], st.session_state['processed_texts'] = load_and_process_context(EMBEDDING_MODEL_NAME,GOOGLE_API_KEY)
 
 
-def conversation_with_gemini(query, model, chat_history, vector_index, processed_texts):
+def conversation_with_gemini(query, model, chat_history, qa_chain, processed_texts):
     """
-    Updates conversation with Gemini considering the document context and chat history.
+    Updates conversation with Gemini considering the document context, chat history,
+    and utilizing the qa_chain for document retrieval, enriched with processed_texts.
     """
-    # Use vector index to find relevant document snippets based on the current query
-    relevant_docs = vector_index.search(query, k=3)  # Adjust k as necessary
-    relevant_texts = " ".join([processed_texts[doc_id] for doc_id, _ in relevant_docs])
-    
-    # Prepare query with history and relevant document context
+    # Preparação da query com o histórico de conversa
     history_context = "\n".join([f"Q: {pair['question']}\nA: {pair['answer']}" for pair in chat_history])
-    full_query = f"{history_context}\n\n{relevant_texts}\nQ: {query}\nA:"
-    
-    qa_chain  = RetrievalQA.from_chain_type(model, retriever=vector_index, return_source_documents=True)
+    full_query = f"{history_context}\nQ: {query}"
 
-    response = qa_chain({"query": full_query})
-    chat_history.append({"question": query, "answer": response["result"]})
-    return response["result"]
+    # Obtenção da resposta e dos documentos relevantes pela qa_chain
+    result = qa_chain({"query": full_query})
+    answer = result.get("result", "Não foi possível gerar uma resposta.")
+    source_documents_info = result.get("source_documents", [])
+    
+    # Enriquecimento da resposta com informações de processed_texts
+    # Exemplo: Incluir o primeiro documento relevante encontrado
+    if source_documents_info:
+        doc_id = source_documents_info[0]  # Assumindo que isso retorne um ID de documento relevante
+        additional_info = processed_texts.get(doc_id, "")
+        enriched_answer = f"{answer}\n\nInformações Adicionais: {additional_info}"
+    else:
+        enriched_answer = answer
+
+    # Atualiza o histórico de conversa com a nova pergunta e resposta enriquecida
+    chat_history.append({"question": query, "answer": enriched_answer})
+
+    return enriched_answer, source_documents_info
+
 
 # Streamlit App
 def main():
@@ -83,14 +94,21 @@ def main():
     st.image(image_url, caption='Arquitetura atual: GitHub + Streamlit')
     st.markdown('**Esta versão contém:**  \nA) Gemini ⌘ [gemini-pro](https://blog.google/intl/pt-br/novidades/nosso-modelo-de-proxima-geracao-gemini-15/);   \nB) Conjunto de dados pré-carregados do CTB [1. Arquivo de Contexto](https://raw.githubusercontent.com/pedrosale/falcon_test/main/CTB3.txt) e [2. Reforço de Contexto](https://raw.githubusercontent.com/pedrosale/falcon_test/main/CTB2.txt);  \nC) ["Retrieval Augmented Generation"](https://python.langchain.com/docs/use_cases/question_answering/) a partir dos dados carregados (em B.) com Langchain.')
     initialize_session_state()
+    
+    # Carrega e configura o modelo Gemini
     gemini_model = ChatGoogleGenerativeAI(model=GEMINI_MODEL_NAME, google_api_key=GOOGLE_API_KEY, temperature=TEMPERATURE, convert_system_message_to_human=True)
+    
+    # Cria a cadeia de QA para utilização na conversa
+    qa_chain = create_rag_qa_chain(gemini_model, st.session_state['vector_index'])
 
     user_query = st.text_input("What's your question?", key="user_query")
     if st.button("Ask"):
         if user_query:
             with st.spinner('Thinking...'):
-                answer = conversation_with_gemini(user_query, gemini_model, st.session_state['chat_history'], st.session_state['vector_index'], st.session_state['processed_texts'])
+                # Ajuste para passar qa_chain se necessário ou utilizar diretamente dentro de conversation_with_gemini
+                answer, source_documents_info = conversation_with_gemini(user_query, gemini_model, st.session_state['chat_history'], qa_chain)
                 st.session_state['chat_history'].append({"question": user_query, "answer": answer})
+                # Pode incluir lógica para exibir informações dos documentos fonte se relevante
                 for interaction in st.session_state['chat_history']:
                     st.text(interaction["question"])
                     st.text_area("", value=interaction["answer"], height=100)
