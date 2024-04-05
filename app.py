@@ -1,114 +1,95 @@
-__import__('pysqlite3')
-import sys
-sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 import streamlit as st
-from langchain.chains import ConversationalRetrievalChain
-from langchain.memory import ConversationBufferMemory
+from langchain.prompts import PromptTemplate
+from langchain.chains.question_answering import load_qa_chain
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.vectorstores import Chroma
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
-from streamlit_chat import message
-import os
 from dotenv import load_dotenv
-import tempfile
-import urllib.request
+import PyPDF2
+import os
+import io
 
+st.title('Chatbot Assistente com Gemini')
+image_url = 'https://raw.githubusercontent.com/pedrosale/falcon_test/af8a20607bae402a893817be0a766ec55a9bcec3/RAG2.jpg'
+st.image(image_url, caption='Arquitetura atual: GitHub + Streamlit')
+st.markdown('**Esta versão contém:**  \nA) Gemini ⌘ [gemini-pro](https://blog.google/intl/pt-br/novidades/nosso-modelo-de-proxima-geracao-gemini-15/);  \nB) Conjunto de dados pré-carregados do CTB [1. Arquivo de Contexto](https://raw.githubusercontent.com/pedrosale/falcon_test/main/CTB3.txt) e [2. Reforço de Contexto](https://raw.githubusercontent.com/pedrosale/falcon_test/main/CTB2.txt);  \nC) ["Retrieval Augmented Generation"](https://python.langchain.com/docs/use_cases/question_answering/) a partir dos dados carregados (em B.).')
+    
+# Load environment variables from .env file
 load_dotenv()
 
+# Retrieve API key from environment variable
 google_api_key = os.getenv("GOOGLE_API_KEY")
 
+# Check if the API key is available
 if google_api_key is None:
-    st.warning("API key not found. Please set the GOOGLE_API_KEY environment variable.")
+    st.warning("API key not found. Please set the google_api_key environment variable.")
     st.stop()
 
-def initialize_session_state():
-    if 'history' not in st.session_state:
-        st.session_state['history'] = []
+    # Carrega o arquivo diretamente
+    file_path1 = "https://raw.githubusercontent.com/pedrosale/falcon_test/main/CTB3.txt"
+    with tempfile.NamedTemporaryFile(delete=False) as temp_file1:
+        temp_file1.write(urllib.request.urlopen(file_path1).read())
+        temp_file_path1 = temp_file1.name
 
-    if 'generated' not in st.session_state:
-        st.session_state['generated'] = ["Como posso te ajudar?"]
-
-    if 'past' not in st.session_state:
-        st.session_state['past'] = ["Olá, sou seu assistente."]
-
-def conversation_chat(query, chain, history):
-    prompt = """
-    Você é um assistente que só conversa no idioma português do Brasil (você nunca, jamais conversa em outro idioma que não seja o português do Brasil).
-    Você responde as perguntas do usuário com base nos arquivos carregados.
-    Vamos pensar passo a passo para responder.
-    """
-    result = chain({"question": query, "chat_history": history}, return_only_outputs=True)
-    history.append((query, result["output_text"]))
-    return result["output_text"]
-
-def display_chat_history(chain):
-    reply_container = st.container()
-    container = st.container()
-
-    with container:
-        with st.form(key='my_form', clear_on_submit=True):
-            user_input = st.text_input("Pergunta:", placeholder="Me pergunte sobre o(s) conjunto(s) de dados pré-carregados", key='input')
-            submit_button = st.form_submit_button(label='Enviar')
-
-        if submit_button and user_input:
-            with st.spinner('Gerando resposta...'):
-                output = conversation_chat(user_input, chain, st.session_state['history'])
-
-            st.session_state['past'].append(user_input)
-            st.session_state['generated'].append(output)
-
-    if st.session_state['generated']:
-        with reply_container:
-            for i in range(len(st.session_state['generated'])):
-                logo_url = 'https://your-logo-url-here.png'  # Substitua pela URL do seu logotipo
-                message(st.session_state["past"][i], is_user=True, key=str(i) + '_user', logo=logo_url)
-                message(st.session_state["generated"][i], key=str(i), logo=logo_url)
-
-def create_conversational_chain():
-    load_dotenv()
-
-    embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001", api_key=google_api_key)
-
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=10000, chunk_overlap=500)
-
-    # Carrega e prepara os arquivos de texto como feito originalmente
-    file_paths = ["https://raw.githubusercontent.com/pedrosale/falcon_test/main/CTB3.txt", "https://raw.githubusercontent.com/pedrosale/falcon_test/main/CTB2.txt"]
-    texts = []
-    for file_path in file_paths:
-        with tempfile.NamedTemporaryFile(delete=False) as temp_file:
-            temp_file.write(urllib.request.urlopen(file_path).read())
-            temp_file_path = temp_file.name
-
-        with open(temp_file_path, 'r', encoding='utf-8') as file:
-            texts.append(file.read())
-
-        os.remove(temp_file_path)
-
-    texts = text_splitter.split_text("\n\n".join(texts))
-
-    vector_store = Chroma.from_texts(texts, embeddings).as_retriever()
-
-    model = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0.3, api_key=google_api_key)
-
-    memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
-
-    chain = ConversationalRetrievalChain.from_llm(llm=model, chain_type='stuff',
-                                                  retriever=vector_store.as_retriever(),
-                                                  memory=memory)
-    return chain
-
-def main():
-    initialize_session_state()
-    st.title('Chatbot Assistente com Gemini')
-    # URL direta para a imagem hospedada no GitHub
-    image_url = 'https://raw.githubusercontent.com/pedrosale/falcon_test/af8a20607bae402a893817be0a766ec55a9bcec3/RAG2.jpg'
-    # Exibir a imagem usando a URL direta
-    st.image(image_url, caption='Arquitetura atual: GitHub + Streamlit')
-    st.markdown('**Esta versão contém:**  \nA) Gemini ⌘ [gemini-pro](https://blog.google/intl/pt-br/novidades/nosso-modelo-de-proxima-geracao-gemini-15/);  \nB) Conjunto de dados pré-carregados do CTB [1. Arquivo de Contexto](https://raw.githubusercontent.com/pedrosale/falcon_test/main/CTB3.txt) e [2. Reforço de Contexto](https://raw.githubusercontent.com/pedrosale/falcon_test/main/CTB2.txt);  \nC) ["Retrieval Augmented Generation"](https://python.langchain.com/docs/use_cases/question_answering/) a partir dos dados carregados (em B.).')
+    text1 = []
+    loader1 = TextLoader(temp_file_path1)
+    text1.extend(loader1.load())
+    os.remove(temp_file_path1)
     
-    chain = create_conversational_chain()
+    # Carrega o segundo arquivo diretamente
+    file_path2 = "https://raw.githubusercontent.com/pedrosale/falcon_test/main/CTB2.txt"
+    with tempfile.NamedTemporaryFile(delete=False) as temp_file2:
+        temp_file2.write(urllib.request.urlopen(file_path2).read())
+        temp_file_path2 = temp_file2.name
 
-    display_chat_history(chain)
+    text2 = []
+    loader2 = TextLoader(temp_file_path2)
+    text2.extend(loader2.load())
+    os.remove(temp_file_path2)
+    
+    # Combina os textos carregados dos dois arquivos
+    context = text1 + text2
 
-if __name__ == "__main__":
-    main()
+    # Split Texts
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=10000, chunk_overlap=200)
+    texts = text_splitter.split_text(context)
+
+    # Chroma Embeddings
+    embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
+    vector_index = Chroma.from_texts(texts, embeddings).as_retriever()
+
+    # Get User Question
+    user_question = st.text_input("Ask a Question:")
+
+    if st.button("Get Answer"):
+        if user_question:
+            # Get Relevant Documents
+            docs = vector_index.get_relevant_documents(user_question)
+
+            # Define Prompt Template
+            prompt_template = """
+            Answer the question as detailed as possible from the provided context,
+            make sure to provide all the details, if the answer is not in
+            provided context just say, "answer is not available in the context",
+            don't provide the wrong answer\n\n
+            Context:\n {context}?\n
+            Question: \n{question}\n
+            Answer:
+            """
+
+            # Create Prompt
+            prompt = PromptTemplate(template=prompt_template, input_variables=['context', 'question'])
+
+            # Load QA Chain
+            model = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0.3, api_key=google_api_key)
+            chain = load_qa_chain(model, chain_type="stuff", prompt=prompt)
+
+            # Get Response
+            response = chain({"input_documents": docs, "question": user_question}, return_only_outputs=True)
+
+            # Display Answer
+            st.subheader("Answer:")
+            st.write(response['output_text'])
+
+        else:
+            st.warning("Please enter a question.")
