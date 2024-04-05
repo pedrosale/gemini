@@ -86,6 +86,11 @@ def conversation_with_gemini(query, model, chat_history, qa_chain, processed_tex
 
     return enriched_answer, source_documents_info
 
+def create_rag_qa_chain(model, vector_index):
+    """
+    Creates a Retrieval-Augmented Generation QA chain.
+    """
+    return RetrievalQA.from_chain_type(model, retriever=vector_index, return_source_documents=True)
 
 # Streamlit App
 def main():
