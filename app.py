@@ -50,8 +50,10 @@ def load_and_process_context():
     return vector_index
 
 def main():
-    st.title('Sistema de Perguntas e Respostas com RAG e Gemini')
-    
+    st.title('Detran + Gemini 💬 CTB')
+    image_url = 'https://raw.githubusercontent.com/pedrosale/falcon_test/af8a20607bae402a893817be0a766ec55a9bcec3/RAG2.jpg'
+    st.image(image_url, caption='Arquitetura atual: GitHub + Streamlit')
+     
     # Carrega e processa o contexto
     vector_index = load_and_process_context()
     
