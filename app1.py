@@ -2,12 +2,12 @@ __import__('pysqlite3')
 import sys
 sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 import streamlit as st
-from langchain.chains import ConversationalRetrievalChain
-from langchain.memory import ConversationBufferMemory
+from io import BytesIO
+from langchain_community.document_loaders import TextLoader  # Ajuste para importação correta
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.vectorstores import Chroma
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
-from streamlit_chat import message
+from langchain.vectorstores import Chroma
+from langchain.chains import RetrievalQA
 import os
 from dotenv import load_dotenv
 import tempfile
@@ -15,100 +15,76 @@ import urllib.request
 
 load_dotenv()
 
-google_api_key = os.getenv("GOOGLE_API_KEY")
+# Constants and API Keys
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+GEMINI_MODEL_NAME = "gemini-pro"
+EMBEDDING_MODEL_NAME = "models/embedding-001"
+TEMPERATURE = 0.75
+CHUNK_SIZE = 1000
+CHUNK_OVERLAP = 500
 
-if google_api_key is None:
-    st.warning("API key not found. Please set the GOOGLE_API_KEY environment variable.")
-    st.stop()
 
-def initialize_session_state():
-    if 'history' not in st.session_state:
-        st.session_state['history'] = []
-
-    if 'generated' not in st.session_state:
-        st.session_state['generated'] = ["Como posso te ajudar?"]
-
-    if 'past' not in st.session_state:
-        st.session_state['past'] = ["Olá, sou seu assistente."]
-
-def conversation_chat(query, chain, history):
-    prompt = """
-    Você é um assistente que só conversa no idioma português do Brasil (você nunca, jamais conversa em outro idioma que não seja o português do Brasil).
-    Você responde as perguntas do usuário com base nos arquivos carregados.
-    Vamos pensar passo a passo para responder.
+def split_text_into_chunks(pages, chunk_size, chunk_overlap):
     """
-    result = chain({"question": query, "chat_history": history}, return_only_outputs=True)
-    history.append((query, result["output_text"]))
-    return result["output_text"]
+    Splits text into smaller chunks for processing.
+    """
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+    return text_splitter.split_documents(pages)
 
-def display_chat_history(chain):
-    reply_container = st.container()
-    container = st.container()
+def setup_gemini_model(model_name, api_key, temperature):
+    """
+    Sets up the Gemini model for text generation.
+    """
+    return ChatGoogleGenerativeAI(model=model_name, google_api_key=api_key, temperature=temperature, convert_system_message_to_human=True)
 
-    with container:
-        with st.form(key='my_form', clear_on_submit=True):
-            user_input = st.text_input("Pergunta:", placeholder="Me pergunte sobre o(s) conjunto(s) de dados pré-carregados", key='input')
-            submit_button = st.form_submit_button(label='Enviar')
+def create_embeddings_and_index(texts, model_name, api_key):
+    """
+    Creates embeddings for texts and builds a vector index for retrieval.
+    """
+    embeddings = GoogleGenerativeAIEmbeddings(model=model_name, google_api_key=api_key)
+    vector_index = Chroma.from_texts(texts, embeddings).as_retriever(search_kwargs={"k":5})
+    return vector_index
 
-        if submit_button and user_input:
-            with st.spinner('Gerando resposta...'):
-                output = conversation_chat(user_input, chain, st.session_state['history'])
+def create_rag_qa_chain(model, vector_index):
+    """
+    Creates a Retrieval-Augmented Generation QA chain.
+    """
+    return RetrievalQA.from_chain_type(model, retriever=vector_index, return_source_documents=True)
 
-            st.session_state['past'].append(user_input)
-            st.session_state['generated'].append(output)
-
-    if st.session_state['generated']:
-        with reply_container:
-            for i in range(len(st.session_state['generated'])):
-                logo_url = 'https://your-logo-url-here.png'  # Substitua pela URL do seu logotipo
-                message(st.session_state["past"][i], is_user=True, key=str(i) + '_user', logo=logo_url)
-                message(st.session_state["generated"][i], key=str(i), logo=logo_url)
-
-def create_conversational_chain():
-    load_dotenv()
-
-    embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001", api_key=google_api_key)
-
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=10000, chunk_overlap=500)
-
-    # Carrega e prepara os arquivos de texto como feito originalmente
-    file_paths = ["https://raw.githubusercontent.com/pedrosale/falcon_test/main/CTB3.txt", "https://raw.githubusercontent.com/pedrosale/falcon_test/main/CTB2.txt"]
-    texts = []
-    for file_path in file_paths:
-        with tempfile.NamedTemporaryFile(delete=False) as temp_file:
-            temp_file.write(urllib.request.urlopen(file_path).read())
-            temp_file_path = temp_file.name
-
-        with open(temp_file_path, 'r', encoding='utf-8') as file:
-            texts.append(file.read())
-
-        os.remove(temp_file_path)
-
-    texts = text_splitter.split_text("\n\n".join(texts))
-
-    vector_store = Chroma.from_texts(texts, embeddings).as_retriever()
-
-    model = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0.3, api_key=google_api_key)
-
-    memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
-
-    chain = ConversationalRetrievalChain.from_llm(llm=model, chain_type='stuff',
-                                                  retriever=vector_store.as_retriever(),
-                                                  memory=memory)
-    return chain
-
+# Streamlit App
+# Streamlit App
 def main():
-    initialize_session_state()
-    st.title('Chatbot Assistente com Gemini')
-    # URL direta para a imagem hospedada no GitHub
+    st.title('Detran + Gemini 💬 CTB')
     image_url = 'https://raw.githubusercontent.com/pedrosale/falcon_test/af8a20607bae402a893817be0a766ec55a9bcec3/RAG2.jpg'
-    # Exibir a imagem usando a URL direta
     st.image(image_url, caption='Arquitetura atual: GitHub + Streamlit')
-    st.markdown('**Esta versão contém:**  \nA) Gemini ⌘ [gemini-pro](https://blog.google/intl/pt-br/novidades/nosso-modelo-de-proxima-geracao-gemini-15/);  \nB) Conjunto de dados pré-carregados do CTB [1. Arquivo de Contexto](https://raw.githubusercontent.com/pedrosale/falcon_test/main/CTB3.txt) e [2. Reforço de Contexto](https://raw.githubusercontent.com/pedrosale/falcon_test/main/CTB2.txt);  \nC) ["Retrieval Augmented Generation"](https://python.langchain.com/docs/use_cases/question_answering/) a partir dos dados carregados (em B.).')
+    st.markdown('**Esta versão contém:**  \nA) Gemini ⌘ [gemini-pro](https://blog.google/intl/pt-br/novidades/nosso-modelo-de-proxima-geracao-gemini-15/);   \nB) Conjunto de dados pré-carregados do CTB [1. Arquivo de Contexto](https://raw.githubusercontent.com/pedrosale/falcon_test/main/CTB3.txt) e [2. Reforço de Contexto](https://raw.githubusercontent.com/pedrosale/falcon_test/main/CTB2.txt);  \nC) ["Retrieval Augmented Generation"](https://python.langchain.com/docs/use_cases/question_answering/) a partir dos dados carregados (em B.) com Langchain.')
+
+    # Carrega os textos diretamente dos arquivos
+    context_texts = []
+    for file_path in ["https://raw.githubusercontent.com/pedrosale/falcon_test/main/CTB3.txt", 
+                      "https://raw.githubusercontent.com/pedrosale/falcon_test/main/CTB2.txt"]:
+        with urllib.request.urlopen(file_path) as response:
+            context_texts.append(response.read().decode('utf-8'))
     
-    chain = create_conversational_chain()
+    context = "\n\n".join(context_texts)
+    
+    # Split Texts
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP)
+    texts = text_splitter.split_text(context)
+    
+    # Process and index the documents
+    embeddings = create_embeddings_and_index(texts, EMBEDDING_MODEL_NAME, GOOGLE_API_KEY)
+    gemini_model = setup_gemini_model(GEMINI_MODEL_NAME, GOOGLE_API_KEY, TEMPERATURE)
+    qa_chain = create_rag_qa_chain(gemini_model, embeddings)
 
-    display_chat_history(chain)
+    question = st.text_input("Enter your question:")
+    if question:
+        with st.spinner('Generating answer...'):
+            try:
+                result = qa_chain({"query": question})
+                st.write("Answer:", result["result"])
+            except Exception as e:
+                st.error(f"Error processing the question: {e}")
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
