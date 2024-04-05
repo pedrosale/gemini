@@ -12,6 +12,8 @@ import os
 from dotenv import load_dotenv
 import tempfile
 import urllib.request
+import chromadb
+import chromadb.config
 
 load_dotenv()
 
