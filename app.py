@@ -7,7 +7,6 @@ import os
 from dotenv import load_dotenv
 import urllib.request
 import tempfile
-from langchain.llms import GoogleGenerativeAI
 from langchain.embeddings import GoogleGenerativeAIEmbeddings
 from langchain.vectorstores import Chroma
 from langchain.chains import RetrievalQA
