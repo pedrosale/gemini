@@ -72,11 +72,11 @@ def conversation_with_gemini(query, model, chat_history, qa_chain, processed_tex
     answer = result.get("result", "Não foi possível gerar uma resposta.")
     source_documents_info = result.get("source_documents", [])
     
-    # Enriquecimento da resposta com informações de processed_texts
-    # Exemplo: Incluir o primeiro documento relevante encontrado
+    # Enriquecimento da resposta com informações do primeiro documento relevante encontrado, se houver
     if source_documents_info:
-        doc_id = source_documents_info[0]  # Assumindo que isso retorne um ID de documento relevante
-        additional_info = processed_texts.get(doc_id, "")
+        # Aqui, adapte para acessar o texto diretamente do documento ou de sua referência
+        # Exemplo: Se source_documents_info contém objetos com um campo 'texto'
+        additional_info = source_documents_info[0].text  # Modifique esta linha conforme necessário
         enriched_answer = f"{answer}\n\nInformações Adicionais: {additional_info}"
     else:
         enriched_answer = answer
