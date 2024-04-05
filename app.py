@@ -44,7 +44,7 @@ def load_and_process_context(EMBEDDING_MODEL_NAME, GOOGLE_API_KEY):
     texts = text_splitter.split_text(context)
     
     # Process and index the documents
-    embeddings = GoogleGenerativeAIEmbeddings(model=embedding_model_name, google_api_key=google_api_key)
+    embeddings = GoogleGenerativeAIEmbeddings(model=EMBEDDING_MODEL_NAME, google_api_key=GOOGLE_API_KEY)
     vector_index = Chroma.from_texts(texts, embeddings).as_retriever(search_kwargs={"k":5})
     
     # Retorna tanto o índice de vetor quanto os textos processados
