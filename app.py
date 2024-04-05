@@ -19,9 +19,9 @@ load_dotenv()
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 GEMINI_MODEL_NAME = "gemini-pro"
 EMBEDDING_MODEL_NAME = "models/embedding-001"
-TEMPERATURE = 0.2
-CHUNK_SIZE = 700
-CHUNK_OVERLAP = 100
+TEMPERATURE = 0.75
+CHUNK_SIZE = 1000
+CHUNK_OVERLAP = 500
 
 # Function to load and split the PDF document
 def load_and_split_pdf(uploaded_file):
