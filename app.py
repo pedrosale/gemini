@@ -7,6 +7,7 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGener
 from dotenv import load_dotenv
 import os
 import io
+import urllib.request
 
 st.title('Detran + Gemini 💬 CTB')
 image_url = 'https://raw.githubusercontent.com/pedrosale/falcon_test/af8a20607bae402a893817be0a766ec55a9bcec3/RAG2.jpg'
