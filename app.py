@@ -1,81 +1,85 @@
-__import__('pysqlite3')
-import sys
-sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+# app.py
 import streamlit as st
-from langchain.prompts import PromptTemplate
-from langchain.chains.question_answering import load_qa_chain
+from io import BytesIO
+from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import Chroma
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
-from dotenv import load_dotenv
-import os
-import io
-import urllib.request
-import tempfile
+from langchain.vectorstores import Chroma
+from langchain.chains import RetrievalQA
 
-st.title('Detran + Gemini 💬 CTB')
-image_url = 'https://raw.githubusercontent.com/pedrosale/falcon_test/af8a20607bae402a893817be0a766ec55a9bcec3/RAG2.jpg'
-st.image(image_url, caption='Arquitetura atual: GitHub + Streamlit')
-st.markdown('**Esta versão contém:**  \nA) Gemini ⌘ [gemini-pro](https://blog.google/intl/pt-br/novidades/nosso-modelo-de-proxima-geracao-gemini-15/);  \nB) Conjunto de dados pré-carregados do CTB [1. Arquivo de Contexto](https://raw.githubusercontent.com/pedrosale/falcon_test/main/CTB3.txt) e [2. Reforço de Contexto](https://raw.githubusercontent.com/pedrosale/falcon_test/main/CTB2.txt);  \nC) ["Retrieval Augmented Generation"](https://python.langchain.com/docs/use_cases/question_answering/) a partir dos dados carregados (em B.).')
-    
-# Load environment variables from .env file
-load_dotenv()
+# Constants and API Keys
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+GEMINI_MODEL_NAME = "gemini-pro"
+EMBEDDING_MODEL_NAME = "models/embedding-001"
+TEMPERATURE = 0.2
+CHUNK_SIZE = 700
+CHUNK_OVERLAP = 100
 
-# Retrieve API key from environment variable
-google_api_key = os.getenv("GOOGLE_API_KEY")
-
-# Check if the API key is available
-if google_api_key is None:
-    st.warning("API key not found. Please set the google_api_key environment variable.")
-    st.stop()
-
-# Este bloco deve estar fora do escopo de verificação da chave da API.
-context_texts = []
-for file_path in ["https://raw.githubusercontent.com/pedrosale/falcon_test/main/CTB3.txt", 
-                  "https://raw.githubusercontent.com/pedrosale/falcon_test/main/CTB2.txt"]:
-    with urllib.request.urlopen(file_path) as response:
-        context_texts.append(response.read().decode('utf-8'))
-
-context = "\n\n".join(context_texts)
-
-# Split Texts
-text_splitter = RecursiveCharacterTextSplitter(chunk_size=10000, chunk_overlap=200)
-texts = text_splitter.split_text(context)
-
-# Chroma Embeddings
-embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001", api_key=google_api_key)
-vector_index = Chroma.from_texts(texts, embeddings)
-
-# Get User Question
-user_question = st.text_input("Ask a Question:")
-
-if st.button("Get Answer") and user_question:
-    # Get Relevant Documents
-    docs = vector_index.get_relevant_documents(user_question)
-
-    # Define Prompt Template
-    prompt_template = """
-    Answer the question as detailed as possible from the provided context,
-    make sure to provide all the details, if the answer is not in
-    provided context just say, "answer is not available in the context",
-    don't provide the wrong answer\n\n
-    Context:\n {context}?\n
-    Question: \n{question}\n
-    Answer:
+# Function to load and split the PDF document
+def load_and_split_pdf(uploaded_file):
     """
+    Loads a PDF document from an uploaded file and splits it into pages.
+    Args:
+    uploaded_file (UploadedFile): Streamlit UploadedFile object.
+    Returns:
+    list: List of pages from the PDF document.
+    """
+    if uploaded_file is not None:
+        with BytesIO(uploaded_file.getbuffer()) as pdf_file:
+            pdf_loader = PyPDFLoader(pdf_file)
+            return pdf_loader.load_and_split()
+    return None
 
-    # Create Prompt
-    prompt = PromptTemplate(template=prompt_template, input_variables=['context', 'question'])
+def split_text_into_chunks(pages, chunk_size, chunk_overlap):
+    """
+    Splits text into smaller chunks for processing.
+    """
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+    return text_splitter.split_documents(pages)
 
-    # Load QA Chain
-    model = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0.3, api_key=google_api_key)
-    chain = load_qa_chain(model, chain_type="stuff", prompt=prompt)
+def setup_gemini_model(model_name, api_key, temperature):
+    """
+    Sets up the Gemini model for text generation.
+    """
+    return ChatGoogleGenerativeAI(model=model_name, google_api_key=api_key, temperature=temperature, convert_system_message_to_human=True)
 
-    # Get Response
-    response = chain({"input_documents": docs, "question": user_question}, return_only_outputs=True)
+def create_embeddings_and_index(texts, model_name, api_key):
+    """
+    Creates embeddings for texts and builds a vector index for retrieval.
+    """
+    embeddings = GoogleGenerativeAIEmbeddings(model=model_name, google_api_key=api_key)
+    vector_index = Chroma.from_texts(texts, embeddings).as_retriever(search_kwargs={"k":5})
+    return vector_index
 
-    # Display Answer
-    st.subheader("Answer:")
-    st.write(response['output_text'])
-else:
-    st.warning("Please enter a question.")
+def create_rag_qa_chain(model, vector_index):
+    """
+    Creates a Retrieval-Augmented Generation QA chain.
+    """
+    return RetrievalQA.from_chain_type(model, retriever=vector_index, return_source_documents=True)
+
+# Streamlit App
+def main():
+    st.title("Financial Report Analysis with RAG")
+
+    uploaded_file = st.file_uploader("Upload Nvidia Financial Report", type=["pdf"])
+    if uploaded_file is not None:
+        with st.spinner('Processing the document...'):
+            pages = load_and_split_pdf(uploaded_file)
+            documents = split_text_into_chunks(pages, CHUNK_SIZE, CHUNK_OVERLAP)
+            embeddings = create_embeddings_and_index(documents, EMBEDDING_MODEL_NAME, GOOGLE_API_KEY)
+            gemini_model = setup_gemini_model(GEMINI_MODEL_NAME, GOOGLE_API_KEY, TEMPERATURE)
+            vector_index = create_embeddings_and_index(documents, EMBEDDING_MODEL_NAME, GOOGLE_API_KEY)
+            qa_chain = create_rag_qa_chain(gemini_model, vector_index)
+            st.success("Document processed successfully!")
+
+    question = st.text_input("Enter your question about Nvidia's financial report:")
+    if question and uploaded_file:
+        with st.spinner('Generating answer...'):
+            try:
+                result = qa_chain({"query": question})
+                st.write("Answer:", result["result"])
+            except Exception as e:
+                st.error(f"Error processing the question: {e}")
+
+if __name__ == '__main__':
+    main()
