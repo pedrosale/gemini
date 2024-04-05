@@ -23,21 +23,6 @@ TEMPERATURE = 0.75
 CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 500
 
-# Function to load and split the PDF document
-def load_and_split_pdf(uploaded_file):
-    """
-    Loads a PDF document from an uploaded file and splits it into pages.
-    Args:
-    uploaded_file (UploadedFile): Streamlit UploadedFile object.
-    Returns:
-    list: List of pages from the PDF document.
-    """
-    if uploaded_file is not None:
-        with BytesIO(uploaded_file.getbuffer()) as pdf_file:
-            pdf_loader = PyPDFLoader(pdf_file)
-            return pdf_loader.load_and_split()
-    return None
-
 def split_text_into_chunks(pages, chunk_size, chunk_overlap):
     """
     Splits text into smaller chunks for processing.
