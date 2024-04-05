@@ -23,67 +23,75 @@ TEMPERATURE = 0.75
 CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 500
 
-def split_text_into_chunks(pages, chunk_size, chunk_overlap):
-    """
-    Splits text into smaller chunks for processing.
-    """
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
-    return text_splitter.split_documents(pages)
-
-def setup_gemini_model(model_name, api_key, temperature):
-    """
-    Sets up the Gemini model for text generation.
-    """
-    return ChatGoogleGenerativeAI(model=model_name, google_api_key=api_key, temperature=temperature, convert_system_message_to_human=True)
-
-def create_embeddings_and_index(texts, model_name, api_key):
-    """
-    Creates embeddings for texts and builds a vector index for retrieval.
-    """
-    embeddings = GoogleGenerativeAIEmbeddings(model=model_name, google_api_key=api_key)
+def load_and_process_context(EMBEDDING_MODEL_NAME, GOOGLE_API_KEY):
+    context_texts = []
+    processed_texts = {}  # Dicionário para mapear IDs de documentos para textos
+    doc_id = 0  # Inicializa um contador para servir como ID do documento
+    
+    for file_path in ["https://raw.githubusercontent.com/pedrosale/falcon_test/main/CTB3.txt", 
+                      "https://raw.githubusercontent.com/pedrosale/falcon_test/main/CTB2.txt"]:
+        with urllib.request.urlopen(file_path) as response:
+            text = response.read().decode('utf-8')
+            context_texts.append(text)
+            processed_texts[doc_id] = text  # Armazena o texto com seu ID correspondente
+            doc_id += 1  # Incrementa o ID para o próximo documento
+    
+    # Concatena todos os textos para criar um grande contexto (se necessário)
+    context = "\n\n".join(context_texts)
+    
+    # Split Texts - Isso pode ser ajustado dependendo de como você quer processar os textos
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP)
+    texts = text_splitter.split_text(context)
+    
+    # Process and index the documents
+    embeddings = GoogleGenerativeAIEmbeddings(model=embedding_model_name, google_api_key=google_api_key)
     vector_index = Chroma.from_texts(texts, embeddings).as_retriever(search_kwargs={"k":5})
-    return vector_index
+    
+    # Retorna tanto o índice de vetor quanto os textos processados
+    return vector_index, processed_texts
 
-def create_rag_qa_chain(model, vector_index):
-    """
-    Creates a Retrieval-Augmented Generation QA chain.
-    """
-    return RetrievalQA.from_chain_type(model, retriever=vector_index, return_source_documents=True)
 
-# Streamlit App
+def initialize_session_state():
+    if 'chat_history' not in st.session_state:
+        st.session_state['chat_history'] = []
+    if 'vector_index' not in st.session_state:
+        st.session_state['vector_index'], st.session_state['processed_texts'] = load_and_process_context(EMBEDDING_MODEL_NAME,GOOGLE_API_KEY)
+
+
+def conversation_with_gemini(query, model, chat_history, vector_index, processed_texts):
+    """
+    Updates conversation with Gemini considering the document context and chat history.
+    """
+    # Use vector index to find relevant document snippets based on the current query
+    relevant_docs = vector_index.search(query, k=3)  # Adjust k as necessary
+    relevant_texts = " ".join([processed_texts[doc_id] for doc_id, _ in relevant_docs])
+    
+    # Prepare query with history and relevant document context
+    history_context = "\n".join([f"Q: {pair['question']}\nA: {pair['answer']}" for pair in chat_history])
+    full_query = f"{history_context}\n\n{relevant_texts}\nQ: {query}\nA:"
+
+    response = model({"query": full_query})
+    chat_history.append({"question": query, "answer": response["result"]})
+    return response["result"]
+
 # Streamlit App
 def main():
     st.title('Detran + Gemini 💬 CTB')
     image_url = 'https://raw.githubusercontent.com/pedrosale/falcon_test/af8a20607bae402a893817be0a766ec55a9bcec3/RAG2.jpg'
     st.image(image_url, caption='Arquitetura atual: GitHub + Streamlit')
     st.markdown('**Esta versão contém:**  \nA) Gemini ⌘ [gemini-pro](https://blog.google/intl/pt-br/novidades/nosso-modelo-de-proxima-geracao-gemini-15/);   \nB) Conjunto de dados pré-carregados do CTB [1. Arquivo de Contexto](https://raw.githubusercontent.com/pedrosale/falcon_test/main/CTB3.txt) e [2. Reforço de Contexto](https://raw.githubusercontent.com/pedrosale/falcon_test/main/CTB2.txt);  \nC) ["Retrieval Augmented Generation"](https://python.langchain.com/docs/use_cases/question_answering/) a partir dos dados carregados (em B.) com Langchain.')
+    initialize_session_state()
+    gemini_model = ChatGoogleGenerativeAI(model=GEMINI_MODEL_NAME, google_api_key=GOOGLE_API_KEY, temperature=TEMPERATURE, convert_system_message_to_human=True)
 
-    # Carrega os textos diretamente dos arquivos
-    context_texts = []
-    for file_path in ["https://raw.githubusercontent.com/pedrosale/falcon_test/main/CTB3.txt", 
-                      "https://raw.githubusercontent.com/pedrosale/falcon_test/main/CTB2.txt"]:
-        with urllib.request.urlopen(file_path) as response:
-            context_texts.append(response.read().decode('utf-8'))
-    
-    context = "\n\n".join(context_texts)
-    
-    # Split Texts
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP)
-    texts = text_splitter.split_text(context)
-    
-    # Process and index the documents
-    embeddings = create_embeddings_and_index(texts, EMBEDDING_MODEL_NAME, GOOGLE_API_KEY)
-    gemini_model = setup_gemini_model(GEMINI_MODEL_NAME, GOOGLE_API_KEY, TEMPERATURE)
-    qa_chain = create_rag_qa_chain(gemini_model, embeddings)
-
-    question = st.text_input("Enter your question:")
-    if question:
-        with st.spinner('Generating answer...'):
-            try:
-                result = qa_chain({"query": question})
-                st.write("Answer:", result["result"])
-            except Exception as e:
-                st.error(f"Error processing the question: {e}")
+    user_query = st.text_input("What's your question?", key="user_query")
+    if st.button("Ask"):
+        if user_query:
+            with st.spinner('Thinking...'):
+                answer = conversation_with_gemini(user_query, gemini_model, st.session_state['chat_history'], st.session_state['vector_index'], st.session_state['processed_texts'])
+                st.session_state['chat_history'].append({"question": user_query, "answer": answer})
+                for interaction in st.session_state['chat_history']:
+                    st.text(interaction["question"])
+                    st.text_area("", value=interaction["answer"], height=100)
 
 if __name__ == '__main__':
     main()
